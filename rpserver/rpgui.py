@@ -8,16 +8,14 @@ from .rpacquire import RpInstrument
 
 class DecayWindow(QMainWindow):
 
-    def __init__(self):
+    def __init__(self, rpi):
         super().__init__()
         self.title = 'Lifetime Measurement'
         self.left = 30
         self.top = 30
         self.width = 700
         self.height = 700
-        self.host = '192.168.0.117'
-        self.channel = 1
-        self.pi = RpInstrument(host=self.host)
+        self.rpi = rpi
         self.initUI()
 
     def initUI(self):
@@ -47,11 +45,11 @@ class DecayWindow(QMainWindow):
         # Server Ip
         self.host_label = QLabel('IP')
         self.host_ledit= QLineEdit(self)
-        self.host_ledit.setText(self.host)
+        self.host_ledit.setText(self.rpi.host)
         # Channel
         self.channel_label = QLabel('Channel')
         self.channel_ledit = QLineEdit(self)
-        self.channel_ledit.setText(str(self.channel))
+        self.channel_ledit.setText(str(self.rpi.channel))
         # Wavelength
         self.wlen_label = QLabel('Wavelength')
         self.wlen_ledit = QLineEdit(self)
@@ -75,10 +73,10 @@ class DecayWindow(QMainWindow):
         self.show()
 
     def acquire(self):
-        v1 = self.rpi.acquire_channel(dec=8, channel=1)
+        t, v1 = self.rpi.acquire_channel()
         name = 'Lifetime decay'
         self.graphicsView.clear()
-        handler = self.graphicsView.plot(v1,pen ='r')
+        handler = self.graphicsView.plot(t, v1,pen ='r')
         #self.graphicsView.getPlotItem().setLabels([])
         #self.l.scene().removeItem(self.l)
         #self.graphicsView.plotItem.addLegend()

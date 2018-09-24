@@ -31,11 +31,11 @@ class DecayWindow(QMainWindow):
         self.graphicsView.addLegend()
 
         self.acquire_btn = QPushButton("Acquire")
-        self.plot_btn = QPushButton("Plot")
+        self.plot_btn = QPushButton("Calibrate")
         self.clearplot_btn = QPushButton("Clear")
 
         self.acquire_btn.clicked.connect(self.acquire) #conecto botones a su función
-        self.plot_btn.clicked.connect(self.plot_clk)
+        self.plot_btn.clicked.connect(self.calibrate)
         self.clearplot_btn.clicked.connect(self.clearplot_clk)
 
         # Textboxes with options
@@ -77,12 +77,12 @@ class DecayWindow(QMainWindow):
         name = 'Lifetime decay'
         self.graphicsView.clear()
         handler = self.graphicsView.plot(t, v1,pen ='r')
-        #self.graphicsView.getPlotItem().setLabels([])
-        #self.l.scene().removeItem(self.l)
-        #self.graphicsView.plotItem.addLegend()
-        #legend = self.graphicsView.plotItem.legend
-        #legend.addItem(handler, name)
 
+    def calibrate(self):
+        t, v1 = self.rpi.calibration_run()
+        name = 'Lifetime decay'
+        self.graphicsView.clear()
+        handler = self.graphicsView.plot(t, v1,pen ='r')
 
     def plot_clk(self):
         x = np.arange(0,100,1)

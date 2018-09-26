@@ -5,12 +5,19 @@ from rpserver.redpitaya_scpi import scpi
 import numpy as np
 import time
 
+class Options(object):
+    def __init__(self, maxsamples=1E6, timeout=1E3, maxwindows=1E5):
+       self.maxsamples = maxsamples
+       self.timeout = timeout
+       self.maxwindows = maxwindows
+
 class RpInstrument(object):
-    def __init__(self, host, decimation, channel, trigger, size=8000, sim=False):
+    def __init__(self, host, decimation, channel, trigger, opts, size=8000, sim=False):
             self.size = int(size) # Read buffer data size
+            self.opts = opts
             self.host = host
             self.channel = int(channel)
-            self.trigger = trigger
+            self.trigger = 'NOW'
             self.ts = float(decimation)/125E6 # Sampling time
             self.simflag = sim
             self.buflen = 16364
@@ -18,6 +25,7 @@ class RpInstrument(object):
             self.trigger_start = 0
             self.trigger_stop = self.buflen - 1 
             self.trigger_period = 0
+            self.calibrated_flag = False
             if not sim:
                 try:
                     self.rp_s = scpi(self.host)
@@ -36,21 +44,16 @@ class RpInstrument(object):
                 print('Runing a simulated version of the driver')
 
     def acquire_channel(self):
-        print(self.rp_s.tx_txt('ACQ:BUF:SIZE?'))
-        self.rp_s.tx_txt('ACQ:START')
         # Clean the buffer
         self.rp_s.tx_txt('ACQ:SOUR1:DATA?')
-        try:
-            self.rp_s.tx_txt('ACQ:TRIG %s' % self.trigger)
-        except:
-            raise Exception("Could'nt set trigger to %s." % self.trigger)
+        self.rp_s.rx_txt()
+        self.rp_s.tx_txt('ACQ:TRIG NOW')
+        self.rp_s.tx_txt('ACQ:START')
         while 1:
             self.rp_s.tx_txt('ACQ:TRIG:STAT?')
             if self.rp_s.rx_txt() == 'TD':
                     break
-        # self.rp_s.tx_txt('ACQ:SOUR1:DATA?')
         self.rp_s.tx_txt('ACQ:SOUR1:DATA?')
-
         buff_string = self.rp_s.rx_txt()
         buff_string = buff_string.strip('{}\n\r').replace("  ", "").split(',')
         buff = list(map(float, buff_string))
@@ -109,28 +112,28 @@ class RpInstrument(object):
         """
         if not self.simflag:
             self.rp_s.tx_txt('ACQ:START')
-            try:
-                self.rp_s.tx_txt('ACQ:TRIG %s' % self.trigger)
-            except:
-                raise Exception("Could'nt set trigger to %s." % self.trigger)
+            self.rp_s.tx_txt('ACQ:TRIG CH2_NE')
+            self.rp_s.tx_txt('ACQ:TRIG:DLY %i' % (self.buflen//2))
             while 1:
                 self.rp_s.tx_txt('ACQ:TRIG:STAT?')
                 if self.rp_s.rx_txt() == 'TD':
                         break
-            self.rp_s.tx_txt('ACQ:SOUR1:DATA?')
+            self.rp_s.tx_txt('ACQ:SOUR2:DATA?')
             buff_string = self.rp_s.rx_txt()
             buff_string = buff_string.strip('{}\n\r').replace("  ", "").split(',')
             signal = np.array(list(map(float, buff_string)))
         else:
             signal = self.generate_simulated_trigger()
         time = np.linspace(0, len(signal)*self.ts, len(signal))
+        # Acquisition endend. Finding trigger level and indexes.
         diff_trigger = np.diff(signal)
         # Find the center of the signal to use it as trigger level
         trigger_level = (signal.max() + signal.min())/2
         self.trigger_level = trigger_level
         # Find start and end of trigger pulse
-        start_index = np.where(signal>trigger_level)[0][0]
-        stop_index = np.where(signal>trigger_level)[0][-1]
+        start_index = np.where(signal<trigger_level)[0][0]
+        stop_index = np.where(signal[self.buflen//2:]>trigger_level)[0][1]+self.buflen//2
+        print(start_index, stop_index)
         if (stop_index - start_index) < self.buflen//2:
             raise Exception("Signal too short, increase frequency.")
         elif stop_index == self.buflen:
@@ -140,28 +143,19 @@ class RpInstrument(object):
         self.trigger_stop = stop_index
         self.trigger_start = start_index
         self.trigger_period = signal_period
-        return time, np.array(signal)
+        self.calibrated_flag = True
+        self.trigger = 'CH2_NE'
+        # Calibration OK message
+        print("Calibration OK. Trigger frequency is: %.3f" % (0.5/signal_period))
+        return time, signal
     
     def acquire_decay(self):
         """ Measures decay with a photon counting approach.
         """
-        if not self.simflag:
-            self.rp_s.tx_txt('ACQ:START')
-            try:
-                self.rp_s.tx_txt('ACQ:TRIG %s' % self.trigger)
-            except:
-                raise Exception("Couldn't set trigger to %s." % self.trigger)
-            while 1:
-                self.rp_s.tx_txt('ACQ:TRIG:STAT?')
-                if self.rp_s.rx_txt() == 'TD':
-                        break
-            self.rp_s.tx_txt('ACQ:SOUR1:DATA?')
-            buff_string = self.rp_s.rx_txt()
-            buff_string = buff_string.strip('{}\n\r').replace("  ", "").split(',')
-            signal = np.array(list(map(float, buff_string)))
-        else:
-            signal = self.generate_simulated_signal()
-        time = np.linspace(0, len(signal)*self.ts, len(signal))
+        if not self.calibrated_flag:
+            print("Warning: No previous calibration. Perfoming calibration...")
+            self.calibration_run
+        time, signal = self.acquire_triggered()
         # Find singal edges
         signal_triggered = signal[self.trigger_start: self.trigger_stop] 
         sig_diff = np.diff(signal_triggered, n=1)

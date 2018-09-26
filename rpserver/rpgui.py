@@ -73,7 +73,7 @@ class DecayWindow(QMainWindow):
         self.show()
 
     def acquire(self):
-        t, v1 = self.rpi.acquire_channel()
+        t, v1 = self.rpi.acquire_triggered()
         name = 'Lifetime decay'
         self.graphicsView.clear()
         handler = self.graphicsView.plot(t, v1,pen ='r')

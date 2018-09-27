@@ -3,7 +3,7 @@ import sys
 from PyQt5.QtWidgets import QWidget, QPushButton, QGridLayout, QLineEdit, QMainWindow, QLabel
 
 import pyqtgraph as pg
-
+import time
 from .rpacquire import RpInstrument
 
 class DecayWindow(QMainWindow):
@@ -32,11 +32,11 @@ class DecayWindow(QMainWindow):
 
         self.acquire_btn = QPushButton("Acquire")
         self.plot_btn = QPushButton("Calibrate")
-        self.clearplot_btn = QPushButton("Clear")
+        self.clearplot_btn = QPushButton("Lifetime")
 
         self.acquire_btn.clicked.connect(self.acquire) #conecto botones a su función
         self.plot_btn.clicked.connect(self.calibrate)
-        self.clearplot_btn.clicked.connect(self.clearplot_clk)
+        self.clearplot_btn.clicked.connect(self.lifetime)
 
         # Textboxes with options
         # Frequency information
@@ -84,13 +84,12 @@ class DecayWindow(QMainWindow):
         self.graphicsView.clear()
         handler = self.graphicsView.plot(t, v1,pen ='r')
 
-    def plot_clk(self):
-        x = np.arange(0,100,1)
-        y = np.arange(0,100,1)
-        name = 'curva random'
-        self.p1 = self.graphicsView.plot(x,y,pen ='r')
-        self.l = self.graphicsView.plotItem.legend
-        self.l.addItem(self.p1, name)
+    def lifetime(self):
+        hist, bins = self.rpi.acquire_decay()
+        name = 'Lifetime decay'
+        self.graphicsView.clear()
+        handler = self.graphicsView.plot(bins[:-1]*1000, hist, symbol='o', size=1)
+
 
     def clearplot_clk(self):
         self.graphicsView.clear()

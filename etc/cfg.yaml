@@ -1,7 +1,7 @@
-rphost: 192.168.0.117
-decimation: 1024 # Appropriate for photon counting for its good duration/
-                 # number of points. Corresponds to 122 MS/s. 
+rphost: 192.168.0.109
+decimation: 8 # Appropriate for photon counting for its good duration/
+                 # number of points. Corresponds to 15.6 MS/s.
 #trigger: TRIG_SRC_CHB_NE # If measurement channel is CH0, then trigger is CH1
-trigger: NOW # CH2_NE
+trigger_channel: 2 # 1 or 2
 size: 8000
 channel: 1 # Measuring channel

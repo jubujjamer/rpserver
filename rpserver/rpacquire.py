@@ -115,6 +115,7 @@ class RpInstrument(object):
     def calibration_run(self):
         """ Calibrates the level and edges of the trigger signal.
         """
+        status_message = ''
         if not self.simflag:
             self.rp_s.tx_txt('ACQ:START')
             self.rp_s.tx_txt('ACQ:TRIG CH%i_NE' % self.trigger_channel)
@@ -142,9 +143,9 @@ class RpInstrument(object):
         except:
             stop_index = -1
         if (stop_index - start_index) < self.buflen//2:
-            print("Trigger signal too short, decrease frequency.")
+            status_message = "Trigger signal too short, decrease frequency."
         elif stop_index == self.buflen:
-            print("Warning: signal trigger may be too slow.")
+            status_message += "Warning: signal trigger may be too slow."
         trigger_duration = stop_index - start_index
         signal_period = trigger_duration*self.ts
         self.trigger_stop = stop_index
@@ -152,19 +153,21 @@ class RpInstrument(object):
         self.trigger_period = signal_period
         self.calibrated_flag = True
         # Calibration OK message
-        print("Calibration OK. Trigger frequency is: %.3f" % (0.5/signal_period))
-        return time_array, signal
+        status_message += "Calibration OK. Trigger frequency is: %.3f" % (0.5/signal_period)
+        return time_array, signal, status_message
 
     def acquire_decay(self):
         """ Measures decay with a photon counting approach.
         """
+        status_message = ''
         if not self.calibrated_flag:
-            print("Warning: No previous calibration. Perfoming calibration...")
+            status_message = "Warning: No previous calibration. Perfoming calibration..."
+            print(status_message)
             self.calibration_run()
         counts = np.array([])
         start = time.time()
         lapse = 0
-        print('Initiating measurement.')
+        status_message = 'Initiating measurement.'
         for k in range(self.opts.maxwindows):
             time_now = time.time()-start
             t, signal = self.acquire_triggered()
@@ -175,15 +178,20 @@ class RpInstrument(object):
             edge_positions = np.where(sig_diff < diff_level)[0]
             counts = np.hstack((counts , edge_positions))
             if time_now-lapse > 1:
-                print('Remaining time %.3f s' % (time_now*self.opts.nsamples/len(counts)))
+                status_message = 'Remaining time %.3f s' % (time_now*(self.opts.nsamples-len(counts))/len(counts))
+                print(status_message)
                 lapse = time_now
             # Ending conditions
             if time_now-start > self.opts.timeout:
-                print('Timeout reached.')
+                status_message = 'Timeout reached.'
+                print(status_message)
+                yield hist, bins, status_message
                 break
             if len(counts)>self.opts.nsamples:
-                print('Collected all the samples')
+                status_message = 'Measurement ready. Collected %i samples in %.1f s.' % (len(counts), time_now)
+                print(status_message)
+                yield hist, bins, status_message
                 break
             times = counts*self.ts
             hist, bins = np.histogram(times, bins=160)
-        return hist, bins
+            yield hist, bins, status_message

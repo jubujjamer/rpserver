@@ -12,7 +12,7 @@ rpi = RpInstrument(cfg.rphost, cfg.decimation, cfg.channel, cfg.trigger_channel,
                    cfg.size, sim=False)
 
 if not QApplication.instance():
-    app= QApplication(sys.argv)
+    app = QApplication(sys.argv)
 else:
     app = QApplication.instance()
 ex = DecayWindow(rpi)

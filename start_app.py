@@ -5,9 +5,9 @@ from rpserver.rpacquire import RpInstrument, Options
 import rpserver.data as dt
 
 cfg = dt.load_data('cfg.yaml')
-opts = Options(nsamples=500000,
-               maxwindows = 100,
-               timeout=10)
+opts = Options(nsamples=cfg.nsamples,
+               maxwindows = 1E5,
+               timeout=100)
 rpi = RpInstrument(cfg.rphost, cfg.decimation, cfg.channel, cfg.trigger_channel, opts,
                    cfg.size, sim=False)
 

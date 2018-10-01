@@ -1,17 +1,21 @@
 import numpy as np
+from os import path
+import datetime
 import sys
+import time
+
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
 from PyQt5.QtWidgets import (QWidget, QPushButton, QGridLayout, QLineEdit, QMainWindow, QLabel,
-                           QAction, QDialog, QDialogButtonBox, QFormLayout, QGridLayout, QGroupBox, QVBoxLayout, QMenu, QMenuBar, QTextEdit, QFileDialog, QApplication, QComboBox,
-                           QSpinBox)
+                             QAction, QDialog, QDialogButtonBox, QFormLayout, QGridLayout, QGroupBox, QVBoxLayout, QMenu, QFileDialog, QApplication, QComboBox)
 from PyQt5.QtCore import QRect
 import pyqtgraph as pg
-import time
-from .rpacquire import RpInstrument
 
+from .rpacquire import RpInstrument
+from pyucnp.experiment import SpectralDecay
+import rpserver.data as data
 
 class Dialog(QDialog):
     NumGridRows = 3
@@ -53,6 +57,7 @@ class DecayWindow(QMainWindow):
     def __init__(self, rpi):
         super(DecayWindow, self).__init__()
         self.rpi = rpi
+        self.sdecay = SpectralDecay()
         self.setGeometry(30, 30, 700, 700)
         self.setWindowTitle("Lifetime Measurement with Red Pitaya")
         # Define a new window for the layout
@@ -116,6 +121,7 @@ class DecayWindow(QMainWindow):
         self.acquire.triggered.connect(self.acquire_channel)
         # Lifetime meassurement
         self.lifetime = QAction("&Lifetime", self)
+        self.lifetime.setShortcut("Ctrl+L")
         # self.lifetime.setStatusTip('Lifetime')
         self.lifetime.triggered.connect(self.lifetime_meassure)
         # Configurate
@@ -132,55 +138,72 @@ class DecayWindow(QMainWindow):
         operationsMenu.addAction(self.lifetime)
         operationsMenu.addAction(self.configurate)
 
+
+    def plot_data(self, t, v, **kwargs):
+#        self.graphicsView.clear()
+#        handler = self.graphicsView.plot(t, v)
+        ax = self.figure.add_subplot(111)
+        ax.clear()
+        ax.plot(t, v, **kwargs)
+        self.canvas.draw()
+        return ax
+
     def addLinedit(self, grid, label, linedit, row, col):
         grid.addWidget(label, row, col, 1, 1)
         grid.addWidget(linedit, row, col+1, 1, 1)
 
     def acquire_channel(self):
         t, v1 = self.rpi.acquire_triggered()
-        self.graphicsView.clear()
-        handler = self.graphicsView.plot(t, v1,pen ='r')
-        self.info_label.setText('Signal acquired.')
+        ax = self.figure.add_subplot(111)
+        ax.clear()
+        ax.plot(t, v1, 'r')
+        self.canvas.draw()
 
     def calibrateTrigger(self):
         t, v1, status = self.rpi.calibration_run()
-        self.graphicsView.clear()
-        handler = self.graphicsView.plot(t, v1,pen ='r')
-        self.info_label.setText(status)
+        ax = self.plot_data(t, v1, color='r')
         return
 
     def lifetime_meassure(self):
+        for hist, bins, status in self.rpi.acquire_decay():
+            ax = self.plot_data(bins[:-1]*1000, hist, marker='o', linestyle='None')
+            self.info_label.setText(status)
+            QApplication.processEvents()
+        ax.set_xlabel('Time (ms)')
+        ax.set_ylabel('Counts (A.U.)')
+        self.sdecay.time = bins[:-1]*1000
+        self.sdecay.idata = hist
+        return
+
+    def saveFile(self):
+        fileDialog = QFileDialog
         try:
             set_wlen = int(self.wlen_ledit.text())
             if set_wlen < 200 or set_wlen > 900:
-                self.info_label.setText('Please, enter a wavelength in the valid range (200 - 900 nm).')
+                self.info_label.setText('Please, specify a wavelength in the valid range (200 - 900 nm).')
                 QApplication.processEvents()
                 return
         except:
             self.info_label.setText('Please, enter wavelength in nm.')
             QApplication.processEvents()
             return
-        ax = self.figure.add_subplot(111)
-
-        for hist, bins, status in self.rpi.acquire_decay():
-            # self.graphicsView.clear()
-            # handler = self.graphicsView.plot(bins[:-1]*1000, hist, symbol='o', size=1)
-            # discards the old graph
-            ax.clear()
-            # plot data
-            ax.plot(bins[:-1]*1000, hist, 'o--')
-            # refresh canvas
-            self.canvas.draw()
-            self.info_label.setText(status)
-            QApplication.processEvents()
-        self.wlen_ledit.clear()
-        return
-
-    def saveFile(self):
-        name = QFileDialog.getSaveFileName(self, 'Save File')
+        timestamp = '{:%Y%m%d-%H%M%S}'.format(datetime.datetime.now())
+        defaultName ='%i-%s.hdf' % (set_wlen, timestamp)
+        name = fileDialog.getSaveFileName(self, 'Save File', defaultName)
         filename = name[0]
-        # text = self.textEdit.toPlainText()
-        np.save(filename+'.npy', self.counts)
+        frequency = self.freq_ledit.text()
+        duty_cycle = self.duty_ledit.text()
+        laser_power = self.lpower_ledit.text()
+        optical_filter = self.filter_ledit.text()
+        if self.sdecay.isEmpty():
+            time = self.sdecay.time
+            idata = self.sdecay.idata
+            data.save_h5f_data(filename, time, idata, set_wlen, laser_power, frequency, duty_cycle,
+                               optical_filter)
+            self.info_label.setText('File saved as %s.' % filename)
+            self.wlen_ledit.clear()
+            self.lpower_ledit.clear()
+            QApplication.processEvents()
         return
 
     def configurateAcquisition(self):

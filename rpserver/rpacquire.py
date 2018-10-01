@@ -174,9 +174,11 @@ class RpInstrument(object):
             # Find singal edges
             signal_triggered = signal[self.trigger_start: self.trigger_stop]
             sig_diff = np.diff(signal_triggered, n=1)
-            diff_level = (sig_diff.max()-sig_diff.min())/2
-            edge_positions = np.where(sig_diff < diff_level)[0]
+            diff_level = (sig_diff.max())/6
+            edge_positions = np.where(sig_diff > diff_level)[0]
             counts = np.hstack((counts , edge_positions))
+            times = counts*self.ts
+            hist, bins = np.histogram(times, bins=160)
             if time_now-lapse > 1:
                 status_message = 'Remaining time %.3f s' % (time_now*(self.opts.nsamples-len(counts))/len(counts))
                 print(status_message)
@@ -186,12 +188,10 @@ class RpInstrument(object):
                 status_message = 'Timeout reached.'
                 print(status_message)
                 yield hist, bins, status_message
-                break
+                return
             if len(counts)>self.opts.nsamples:
                 status_message = 'Measurement ready. Collected %i samples in %.1f s.' % (len(counts), time_now)
                 print(status_message)
                 yield hist, bins, status_message
-                break
-            times = counts*self.ts
-            hist, bins = np.histogram(times, bins=160)
+                return
             yield hist, bins, status_message

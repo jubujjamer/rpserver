@@ -5,3 +5,7 @@ decimation: 8 # Appropriate for photon counting for its good duration/
 trigger_channel: 2 # 1 or 2
 size: 8000
 channel: 1 # Measuring channel
+# Measurement dependent parameters
+frequency: 400 # Hz
+duty_cycle: 20
+nsamples: 500

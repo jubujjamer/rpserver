@@ -89,13 +89,14 @@ class RpInstrument(object):
          pulses = pulses + noise + 0.8
          return pulses
 
-    def acquire_triggered(self):
+    def acquire_triggered(self, delay=16364//2):
         """ Measures decay with a photon counting approach.
         """
         if not self.simflag:
+            self.rp_s.tx_txt('ACQ:START')
             self.rp_s.tx_txt('ACQ:TRIG:LEVEL %.1f' % self.trigger_level)
             self.rp_s.tx_txt('ACQ:TRIG CH%i_NE' % self.trigger_channel)
-            self.rp_s.tx_txt('ACQ:START')
+            self.rp_s.tx_txt('ACQ:TRIG:DLY %i' % (delay))
             while 1:
                 self.rp_s.tx_txt('ACQ:TRIG:STAT?')
                 if self.rp_s.rx_txt() == 'TD':
@@ -116,10 +117,11 @@ class RpInstrument(object):
         """ Calibrates the level and edges of the trigger signal.
         """
         status_message = ''
+        delay = self.buflen//2
         if not self.simflag:
             self.rp_s.tx_txt('ACQ:START')
             self.rp_s.tx_txt('ACQ:TRIG CH%i_NE' % self.trigger_channel)
-            self.rp_s.tx_txt('ACQ:TRIG:DLY %i' % (self.buflen//2))
+            self.rp_s.tx_txt('ACQ:TRIG:DLY %i' % (delay))
             while 1:
                 self.rp_s.tx_txt('ACQ:TRIG:STAT?')
                 if self.rp_s.rx_txt() == 'TD':
@@ -154,6 +156,7 @@ class RpInstrument(object):
         self.calibrated_flag = True
         # Calibration OK message
         status_message += "Calibration OK. Trigger frequency is: %.3f" % (0.5/signal_period)
+        print(status_message, trigger_level)
         return time_array, signal, status_message
 
     def acquire_decay(self):
@@ -168,30 +171,63 @@ class RpInstrument(object):
         start = time.time()
         lapse = 0
         status_message = 'Initiating measurement.'
+        # Buffer numbers are required for longer aquisitions than just the
+        # provided by the maximum buffer length.
+        # max_buffers indicates the number of windows desired for the
+        # acquisition. The result is a messurement 'max_buffers' times longer.
+        # buffer_number is a flag indicating the actual used window which is
+        # selected in a circular fashion.
+        buffer_number = 0
+        max_buffers = 2
         for k in range(self.opts.maxwindows):
+            delay = buffer_number*self.buflen + self.buflen//2
             time_now = time.time()-start
-            t, signal = self.acquire_triggered()
+            t, signal = self.acquire_triggered(delay)
             # Find singal edges
             signal_triggered = signal[self.trigger_start: self.trigger_stop]
             sig_diff = np.diff(signal_triggered, n=1)
-            diff_level = (sig_diff.max())/6
-            edge_positions = np.where(sig_diff > diff_level)[0]
+            if buffer_number == 0:
+                diff_level = sig_diff.min()/2
+            # diff_level = 0.12
+            edge_positions = np.where(sig_diff < diff_level)[0]
+            # Remove colse pulses as they can be tagging errors
+            e_prev=0
+            for i, e in enumerate(edge_positions):
+                if e-e_prev < 5:
+                    edge_positions[i] = -1
+                e_prev = e
+            edge_positions = edge_positions[edge_positions>=0]
+            edge_positions += buffer_number*self.buflen
             counts = np.hstack((counts , edge_positions))
-            times = counts*self.ts
-            hist, bins = np.histogram(times, bins=160)
-            if time_now-lapse > 1:
-                status_message = 'Remaining time %.3f s' % (time_now*(self.opts.nsamples-len(counts))/len(counts))
-                print(status_message)
-                lapse = time_now
-            # Ending conditions
-            if time_now-start > self.opts.timeout:
-                status_message = 'Timeout reached.'
-                print(status_message)
+            # Plotting inside the aquisition for debugging
+            if False:
+                import matplotlib.pyplot as plt
+                plt.plot(signal_triggered)
+                plt.plot(sig_diff)
+                xrange = range(len(sig_diff))
+                onesarr = np.zeros_like(sig_diff)
+                onesarr[edge_positions] = sig_diff[edge_positions]
+                plt.plot(xrange, onesarr, 'rx', linestyle='None')
+                plt.show()
+            buffer_number += 1
+            # When all the buffers are filled, process the iteration.
+            if buffer_number == max_buffers:
+                times = counts*self.ts
+                hist, bins = np.histogram(times, bins=160)
+                if time_now-lapse > 1:
+                    status_message = 'Remaining time %.3f s' % (time_now*(self.opts.nsamples-len(counts))/len(counts))
+                    print(status_message)
+                    lapse = time_now
+                # Ending conditions
+                if time_now-start > self.opts.timeout:
+                    status_message = 'Timeout reached.'
+                    print(status_message)
+                    yield hist, bins, status_message
+                    return
+                if len(counts)>self.opts.nsamples:
+                    status_message = 'Measurement ready. Collected %i samples in %.1f s.' % (len(counts), time_now)
+                    print(status_message)
+                    yield hist, bins, status_message
+                    return
                 yield hist, bins, status_message
-                return
-            if len(counts)>self.opts.nsamples:
-                status_message = 'Measurement ready. Collected %i samples in %.1f s.' % (len(counts), time_now)
-                print(status_message)
-                yield hist, bins, status_message
-                return
-            yield hist, bins, status_message
+                buffer_number = 0

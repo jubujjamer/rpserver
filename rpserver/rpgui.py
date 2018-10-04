@@ -166,7 +166,7 @@ class DecayWindow(QMainWindow):
 
     def lifetime_meassure(self):
         for hist, bins, status in self.rpi.acquire_decay():
-            ax = self.plot_data(bins[:-1]*1000, hist, marker='o', linestyle='None')
+            ax = self.plot_data(bins[:-1]*1000, hist, marker='o', linestyle='None', markersize=2)
             self.info_label.setText(status)
             QApplication.processEvents()
         ax.set_xlabel('Time (ms)')

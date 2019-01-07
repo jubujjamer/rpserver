@@ -222,12 +222,12 @@ class RpInstrument(object):
                 if time_now-start > self.opts.timeout:
                     status_message = 'Timeout reached.'
                     print(status_message)
-                    yield hist, bins, status_message
+                    yield hist, bins, counts, status_message
                     return
                 if len(counts)>self.opts.nsamples:
                     status_message = 'Measurement ready. Collected %i samples in %.1f s.' % (len(counts), time_now)
                     print(status_message)
-                    yield hist, bins, status_message
+                    yield hist, bins, counts, status_message
                     return
-                yield hist, bins, status_message
+                yield hist, bins, counts, status_message
                 buffer_number = 0

@@ -58,6 +58,7 @@ class DecayWindow(QMainWindow):
         super(DecayWindow, self).__init__()
         self.rpi = rpi
         self.sdecay = SpectralDecay()
+        self.couts = None
         self.setGeometry(30, 30, 700, 700)
         self.setWindowTitle("Lifetime Measurement with Red Pitaya")
         # Define a new window for the layout
@@ -165,7 +166,7 @@ class DecayWindow(QMainWindow):
         return
 
     def lifetime_meassure(self):
-        for hist, bins, status in self.rpi.acquire_decay():
+        for hist, bins, counts, status in self.rpi.acquire_decay():
             ax = self.plot_data(bins[:-1]*1000, hist, marker='o', linestyle='None', markersize=2)
             self.info_label.setText(status)
             QApplication.processEvents()
@@ -173,6 +174,7 @@ class DecayWindow(QMainWindow):
         ax.set_ylabel('Counts (A.U.)')
         self.sdecay.time = bins[:-1]*1000
         self.sdecay.idata = hist
+        self.counts = counts
         return
 
     def saveFile(self):
@@ -198,7 +200,7 @@ class DecayWindow(QMainWindow):
         if self.sdecay.isEmpty():
             time = self.sdecay.time
             idata = self.sdecay.idata
-            data.save_h5f_data(filename, time, idata, set_wlen, laser_power, frequency, duty_cycle,
+            data.save_h5f_data(filename, counts, time, idata, set_wlen, laser_power, frequency, duty_cycle,
                                optical_filter)
             self.info_label.setText('File saved as %s.' % filename)
             self.wlen_ledit.clear()

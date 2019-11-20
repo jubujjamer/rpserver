@@ -1,4 +1,5 @@
-rphost: 192.168.0.109
+#rphost: 192.168.0.109
+rphost: rp-f055f1.local
 decimation: 8 # Appropriate for photon counting for its good duration/
                  # number of points. Corresponds to 15.6 MS/s.
 #trigger: TRIG_SRC_CHB_NE # If measurement channel is CH0, then trigger is CH1
@@ -8,4 +9,5 @@ channel: 1 # Measuring channel
 # Measurement dependent parameters
 frequency: 400 # Hz
 duty_cycle: 20
-nsamples: 500
+nsamples: 3000
+current: .1

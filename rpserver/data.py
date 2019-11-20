@@ -23,10 +23,11 @@ def load_data(data_file=None):
     cfg = config(*config_dict.values())
     return cfg
 
-def save_h5f_data(filename, time, idata, wavelength, laser_power, frequency, duty_cycle,
+def save_h5f_data(filename, counts, time, idata, wavelength, laser_power, frequency, duty_cycle,
                   optical_filter):
     with h5py.File(filename, "w") as f:
         f.create_dataset("time", data=time)
+        cdset = f.create_dataset("counts", data=counts)
         idset = f.create_dataset("idata", data=idata)
         idset.attrs['wavelength'] = wavelength
         idset.attrs['laser_power'] = laser_power

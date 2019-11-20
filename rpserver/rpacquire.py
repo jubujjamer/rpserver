@@ -7,10 +7,11 @@ import numpy as np
 import time
 
 class Options(object):
-    def __init__(self, nsamples=1E6, timeout=1E3, maxwindows=1E5):
+    def __init__(self, nsamples=1E6, timeout=1E3, maxwindows=1E5, current=.1):
        self.nsamples = int(nsamples)
        self.timeout = int(timeout)
        self.maxwindows = int(maxwindows)
+       self.current = float(current)
 
 class RpInstrument(object):
     def __init__(self, host, decimation, channel, trigger_channel, opts, size=8000, sim=False):
@@ -156,6 +157,7 @@ class RpInstrument(object):
         self.calibrated_flag = True
         # Calibration OK message
         status_message += "Calibration OK. Trigger frequency is: %.3f" % (0.5/signal_period)
+        print(self.trigger_start, self.trigger_stop)
         print(status_message, trigger_level)
         return time_array, signal, status_message
 
@@ -188,12 +190,13 @@ class RpInstrument(object):
             sig_diff = np.diff(signal_triggered, n=1)
             if buffer_number == 0:
                 diff_level = sig_diff.min()/2
-            # diff_level = 0.12
+            diff_level = -0.005
             edge_positions = np.where(sig_diff < diff_level)[0]
+            
             # Remove colse pulses as they can be tagging errors
             e_prev=0
             for i, e in enumerate(edge_positions):
-                if e-e_prev < 5:
+                if e-e_prev < 3:
                     edge_positions[i] = -1
                 e_prev = e
             edge_positions = edge_positions[edge_positions>=0]
@@ -214,20 +217,22 @@ class RpInstrument(object):
             if buffer_number == max_buffers:
                 times = counts*self.ts
                 hist, bins = np.histogram(times, bins=160)
-                if time_now-lapse > 1:
-                    status_message = 'Remaining time %.3f s' % (time_now*(self.opts.nsamples-len(counts))/len(counts))
-                    print(status_message)
+                if time_now-lapse > 1 and len(counts):
+                    remaining_time = time_now*(self.opts.nsamples-len(counts))/len(counts)
+                    remaining_time =  min(remaining_time, self.opts.timeout-time_now)
+                    status_message = 'Remaining time %.3f s' % remaining_time
+                    print(status_message, len(counts))
                     lapse = time_now
                 # Ending conditions
-                if time_now-start > self.opts.timeout:
+                if time_now > self.opts.timeout:
                     status_message = 'Timeout reached.'
                     print(status_message)
-                    yield hist, bins, status_message
+                    yield hist, bins, counts, status_message
                     return
                 if len(counts)>self.opts.nsamples:
                     status_message = 'Measurement ready. Collected %i samples in %.1f s.' % (len(counts), time_now)
                     print(status_message)
-                    yield hist, bins, status_message
+                    yield hist, bins, counts, status_message
                     return
-                yield hist, bins, status_message
+                yield hist, bins, counts, status_message
                 buffer_number = 0

@@ -53,11 +53,43 @@ class Dialog(QDialog):
         self.formGroupBox.setLayout(layout)
 
 
+class LaserDialog(QDialog):
+    NumGridRows = 3
+    NumButtons = 4
+
+    def __init__(self, opts, ):
+        super(LaserDialog, self).__init__()
+        self.createFormGroupBox(opts, )
+        buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttonBox.accepted.connect(self.accept)
+        buttonBox.rejected.connect(self.reject)
+        mainLayout = QVBoxLayout()
+        mainLayout.addWidget(self.formGroupBox)
+        mainLayout.addWidget(buttonBox)
+        self.setLayout(mainLayout)
+        self.setWindowTitle("Laser parameters")
+        self.show()
+
+    def createFormGroupBox(self, opts, ):
+        self.formGroupBox = QGroupBox("Laser parameters")
+        # Laser pulsing mode configuration
+        pulsing_combobox = QComboBox()
+        pulsing_combobox.addItem('CW')
+        pulsing_combobox.addItem('QCW')
+        # Default laser power
+        current = QLineEdit(str(opts.current))
+        layout = QFormLayout()
+        layout.addRow(QLabel("Current:"), current)
+        layout.addRow(QLabel("Pulse mode:"), channel_combobox)
+        self.formGroupBox.setLayout(layout)
+
+
 class DecayWindow(QMainWindow):
     def __init__(self, rpi):
         super(DecayWindow, self).__init__()
         self.rpi = rpi
         self.sdecay = SpectralDecay()
+        self.counts = None
         self.setGeometry(30, 30, 700, 700)
         self.setWindowTitle("Lifetime Measurement with Red Pitaya")
         # Define a new window for the layout
@@ -71,7 +103,7 @@ class DecayWindow(QMainWindow):
         # pg.setConfigOption('background', 'w')
         # self.graphicsView = pg.PlotWidget(self.window)
         # self.graphicsView.addLegend()
-        # Buttons
+        # Buttons 
         # self.lifetime_button = QPushButton("Lifetime")
         # Button events
         # self.lifetime_button.clicked.connect(self.lifetime)
@@ -128,6 +160,9 @@ class DecayWindow(QMainWindow):
         self.configurate = QAction("&Configurate", self)
         # self.lifetime.setStatusTip('Configurate')
         self.configurate.triggered.connect(self.configurateAcquisition)
+        # Sets the laser power and mode
+        self.laser = QAction("&Laser Setup", self)
+        self.laser.triggered.connect(self.laser_setup)
         # Adding the menu
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu('&File')
@@ -137,6 +172,7 @@ class DecayWindow(QMainWindow):
         operationsMenu.addAction(self.acquire)
         operationsMenu.addAction(self.lifetime)
         operationsMenu.addAction(self.configurate)
+        operationsMenu.addAction(self.laser)
 
 
     def plot_data(self, t, v, **kwargs):
@@ -165,7 +201,7 @@ class DecayWindow(QMainWindow):
         return
 
     def lifetime_meassure(self):
-        for hist, bins, status in self.rpi.acquire_decay():
+        for hist, bins, counts, status in self.rpi.acquire_decay():
             ax = self.plot_data(bins[:-1]*1000, hist, marker='o', linestyle='None', markersize=2)
             self.info_label.setText(status)
             QApplication.processEvents()
@@ -173,6 +209,7 @@ class DecayWindow(QMainWindow):
         ax.set_ylabel('Counts (A.U.)')
         self.sdecay.time = bins[:-1]*1000
         self.sdecay.idata = hist
+        self.counts = counts
         return
 
     def saveFile(self):
@@ -196,9 +233,10 @@ class DecayWindow(QMainWindow):
         laser_power = self.lpower_ledit.text()
         optical_filter = self.filter_ledit.text()
         if self.sdecay.isEmpty():
+            counts = self.counts
             time = self.sdecay.time
             idata = self.sdecay.idata
-            data.save_h5f_data(filename, time, idata, set_wlen, laser_power, frequency, duty_cycle,
+            data.save_h5f_data(filename, counts, time, idata, set_wlen, laser_power, frequency, duty_cycle,
                                optical_filter)
             self.info_label.setText('File saved as %s.' % filename)
             self.wlen_ledit.clear()
@@ -208,6 +246,11 @@ class DecayWindow(QMainWindow):
 
     def configurateAcquisition(self):
         configDialog = Dialog(self.rpi.opts, self.rpi.host, self.rpi.channel)
+        configDialog.exec_()
+        return
+
+    def laser_setup(self):
+        configDialog = LaserDialog(self.rpi.opts)
         configDialog.exec_()
         return
 
